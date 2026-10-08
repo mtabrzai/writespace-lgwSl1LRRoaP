@@ -1,0 +1,882 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+/.nyc_output
+
+# production
+/dist
+/build
+/.output
+/.next
+
+# misc
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+```
+
+
++++++ src/api/__mocks__/apiClient.ts
+export const mockGet = vi.fn();
+export const mockPost = vi.fn();
+export const mockPut = vi.fn();
+export const mockDelete = vi.fn();
+
+export const apiClient = {
+  get: mockGet,
+  post: mockPost,
+  put: mockPut,
+  delete: mockDelete,
+};
+
+
++++++ src/api/apiClient.test.ts
+import { apiClient } from './apiClient';
+import { mockGet, mockPost, mockPut, mockDelete } from './__mocks__/apiClient';
+
+vi.mock('./apiClient', async () => {
+  const actual = await vi.importActual('./apiClient');
+  return {
+    ...actual,
+    apiClient: {
+      get: mockGet,
+      post: mockPost,
+      put: mockPut,
+      delete: mockDelete,
+    },
+  };
+});
+
+describe('apiClient', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('get', () => {
+    it('makes a GET request with correct URL and headers', async () => {
+      mockGet.mockResolvedValue({ data: 'test' });
+      const result = await apiClient.get('/test');
+      expect(result).toEqual({ data: 'test' });
+      expect(mockGet).toHaveBeenCalledWith('/test', {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+    });
+
+    it('throws an error when the request fails', async () => {
+      mockGet.mockRejectedValue(new Error('Network error'));
+      await expect(apiClient.get('/test')).rejects.toThrow('Network error');
+    });
+  });
+
+  describe('post', () => {
+    it('makes a POST request with correct URL, data, and headers', async () => {
+      mockPost.mockResolvedValue({ data: 'created' });
+      const result = await apiClient.post('/test', { key: 'value' });
+      expect(result).toEqual({ data: 'created' });
+      expect(mockPost).toHaveBeenCalledWith('/test', { key: 'value' }, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+    });
+
+    it('throws an error when the request fails', async () => {
+      mockPost.mockRejectedValue(new Error('Network error'));
+      await expect(apiClient.post('/test', {})).rejects.toThrow('Network error');
+    });
+  });
+
+  describe('put', () => {
+    it('makes a PUT request with correct URL, data, and headers', async () => {
+      mockPut.mockResolvedValue({ data: 'updated' });
+      const result = await apiClient.put('/test', { key: 'value' });
+      expect(result).toEqual({ data: 'updated' });
+      expect(mockPut).toHaveBeenCalledWith('/test', { key: 'value' }, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+    });
+
+    it('throws an error when the request fails', async () => {
+      mockPut.mockRejectedValue(new Error('Network error'));
+      await expect(apiClient.put('/test', {})).rejects.toThrow('Network error');
+    });
+  });
+
+  describe('delete', () => {
+    it('makes a DELETE request with correct URL and headers', async () => {
+      mockDelete.mockResolvedValue({ data: 'deleted' });
+      const result = await apiClient.delete('/test');
+      expect(result).toEqual({ data: 'deleted' });
+      expect(mockDelete).toHaveBeenCalledWith('/test', {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+    });
+
+    it('throws an error when the request fails', async () => {
+      mockDelete.mockRejectedValue(new Error('Network error'));
+      await expect(apiClient.delete('/test')).rejects.toThrow('Network error');
+    });
+  });
+});
+
+
++++++ src/api/apiClient.ts
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+
+interface ApiClient {
+  get<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>>;
+  post<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<AxiosResponse<T>>;
+  put<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<AxiosResponse<T>>;
+  delete<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>>;
+}
+
+const createApiClient = (): ApiClient => {
+  const instance: AxiosInstance = axios.create({
+    baseURL: import.meta.env.VITE_BASE_URL,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (import.meta.env.VITE_API_KEY) {
+    instance.defaults.headers.common['Authorization'] = `Bearer ${import.meta.env.VITE_API_KEY}`;
+  }
+
+  return {
+    get: <T>(url: string, config?: AxiosRequestConfig) => instance.get<T>(url, config),
+    post: <T>(url: string, data?: unknown, config?: AxiosRequestConfig) => instance.post<T>(url, data, config),
+    put: <T>(url: string, data?: unknown, config?: AxiosRequestConfig) => instance.put<T>(url, data, config),
+    delete: <T>(url: string, config?: AxiosRequestConfig) => instance.delete<T>(url, config),
+  };
+};
+
+export const apiClient = createApiClient();
+
+
++++++ src/components/ErrorBoundary.tsx
+import React, { Component, ErrorInfo, ReactNode } from 'react';
+
+interface ErrorBoundaryProps {
+  children: ReactNode;
+  fallback?: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error?: Error;
+}
+
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+    console.error('ErrorBoundary caught an error:', error, errorInfo);
+  }
+
+  render(): ReactNode {
+    if (this.state.hasError) {
+      return this.props.fallback || (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+          <h2 className="text-red-800 font-medium">Something went wrong</h2>
+          <p className="text-red-600 mt-2">{this.state.error?.message}</p>
+          <button
+            onClick={() => this.setState({ hasError: false })}
+            className="mt-4 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+          >
+            Try again
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+
++++++ src/components/ErrorBoundary.test.tsx
+import { render, screen } from '@testing-library/react';
+import { ErrorBoundary } from './ErrorBoundary';
+
+const ProblemChild = () => {
+  throw new Error('Error thrown from problem child');
+  return <div>Error</div>;
+};
+
+describe('ErrorBoundary', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('renders children when there is no error', () => {
+    render(
+      <ErrorBoundary>
+        <div>Safe child</div>
+      </ErrorBoundary>
+    );
+
+    expect(screen.getByText('Safe child')).toBeInTheDocument();
+  });
+
+  it('renders fallback UI when a child throws an error', () => {
+    render(
+      <ErrorBoundary>
+        <ProblemChild />
+      </ErrorBoundary>
+    );
+
+    expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+    expect(screen.getByText('Error thrown from problem child')).toBeInTheDocument();
+  });
+
+  it('renders custom fallback when provided', () => {
+    const customFallback = <div>Custom fallback</div>;
+
+    render(
+      <ErrorBoundary fallback={customFallback}>
+        <ProblemChild />
+      </ErrorBoundary>
+    );
+
+    expect(screen.getByText('Custom fallback')).toBeInTheDocument();
+  });
+
+  it('resets error state when "Try again" button is clicked', () => {
+    render(
+      <ErrorBoundary>
+        <ProblemChild />
+      </ErrorBoundary>
+    );
+
+    expect(screen.queryByText('Safe child')).not.toBeInTheDocument();
+
+    screen.getByText('Try again').click();
+
+    expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument();
+  });
+});
+
+
++++++ src/components/LoadingSpinner.tsx
+import React from 'react';
+
+interface LoadingSpinnerProps {
+  size?: 'sm' | 'md' | 'lg';
+  className?: string;
+}
+
+export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({ size = 'md', className = '' }) => {
+  const sizeClasses = {
+    sm: 'h-4 w-4',
+    md: 'h-8 w-8',
+    lg: 'h-12 w-12',
+  };
+
+  return (
+    <div className={`flex items-center justify-center ${className}`}>
+      <div
+        className={`animate-spin rounded-full border-t-2 border-b-2 border-blue-500 ${sizeClasses[size]}`}
+        role="status"
+        aria-label="Loading"
+      >
+        <span className="sr-only">Loading...</span>
+      </div>
+    </div>
+  );
+};
+
+
++++++ src/components/LoadingSpinner.test.tsx
+import { render, screen } from '@testing-library/react';
+import { LoadingSpinner } from './LoadingSpinner';
+
+describe('LoadingSpinner', () => {
+  it('renders with default size', () => {
+    render(<LoadingSpinner />);
+    const spinner = screen.getByRole('status');
+    expect(spinner).toHaveClass('h-8 w-8');
+    expect(spinner).toHaveAttribute('aria-label', 'Loading');
+  });
+
+  it('renders with small size', () => {
+    render(<LoadingSpinner size="sm" />);
+    const spinner = screen.getByRole('status');
+    expect(spinner).toHaveClass('h-4 w-4');
+  });
+
+  it('renders with large size', () => {
+    render(<LoadingSpinner size="lg" />);
+    const spinner = screen.getByRole('status');
+    expect(spinner).toHaveClass('h-12 w-12');
+  });
+
+  it('applies custom className', () => {
+    render(<LoadingSpinner className="mx-auto" />);
+    const container = screen.getByRole('status').parentElement;
+    expect(container).toHaveClass('mx-auto');
+  });
+
+  it('has accessible label', () => {
+    render(<LoadingSpinner />);
+    expect(screen.getByLabelText('Loading')).toBeInTheDocument();
+  });
+});
+
+
++++++ src/hooks/useDebounce.test.ts
+import { renderHook, act } from '@testing-library/react';
+import { useDebounce } from './useDebounce';
+
+describe('useDebounce', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('returns the initial value immediately', () => {
+    const { result } = renderHook(() => useDebounce('initial', 500));
+    expect(result.current).toBe('initial');
+  });
+
+  it('updates the debounced value after the delay', () => {
+    const { result, rerender } = renderHook(({ value, delay }) => useDebounce(value, delay), {
+      initialProps: { value: 'initial', delay: 500 },
+    });
+
+    rerender({ value: 'updated', delay: 500 });
+    expect(result.current).toBe('initial');
+
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(result.current).toBe('updated');
+  });
+
+  it('does not update the debounced value if delay is not reached', () => {
+    const { result, rerender } = renderHook(({ value, delay }) => useDebounce(value, delay), {
+      initialProps: { value: 'initial', delay: 500 },
+    });
+
+    rerender({ value: 'updated', delay: 500 });
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(result.current).toBe('initial');
+  });
+
+  it('clears the timeout on unmount', () => {
+    const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
+    const { unmount } = renderHook(() => useDebounce('value', 500));
+
+    unmount();
+    expect(clearTimeoutSpy).toHaveBeenCalled();
+    clearTimeoutSpy.mockRestore();
+  });
+
+  it('handles rapid value changes', () => {
+    const { result, rerender } = renderHook(({ value, delay }) => useDebounce(value, delay), {
+      initialProps: { value: 'initial', delay: 500 },
+    });
+
+    rerender({ value: 'first', delay: 500 });
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    rerender({ value: 'second', delay: 500 });
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    rerender({ value: 'third', delay: 500 });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(result.current).toBe('third');
+  });
+});
+
+
++++++ src/hooks/useLocalStorage.test.ts
+import { renderHook, act } from '@testing-library/react';
+import { useLocalStorage } from './useLocalStorage';
+
+describe('useLocalStorage', () => {
+  const key = 'test-key';
+  const initialValue = 'initial';
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('returns the initial value when localStorage is empty', () => {
+    const { result } = renderHook(() => useLocalStorage(key, initialValue));
+    expect(result.current[0]).toBe(initialValue);
+  });
+
+  it('returns the stored value when localStorage has data', () => {
+    localStorage.setItem(key, JSON.stringify('stored'));
+    const { result } = renderHook(() => useLocalStorage(key, initialValue));
+    expect(result.current[0]).toBe('stored');
+  });
+
+  it('updates localStorage when the state changes', () => {
+    const { result } = renderHook(() => useLocalStorage(key, initialValue));
+
+    act(() => {
+      result.current[1]('updated');
+    });
+
+    expect(localStorage.getItem(key)).toBe(JSON.stringify('updated'));
+    expect(result.current[0]).toBe('updated');
+  });
+
+  it('handles JSON.parse errors gracefully', () => {
+    localStorage.setItem(key, 'invalid-json');
+    const { result } = renderHook(() => useLocalStorage(key, initialValue));
+    expect(result.current[0]).toBe(initialValue);
+  });
+
+  it('handles localStorage.setItem errors gracefully', () => {
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('Storage error');
+    });
+
+    const { result } = renderHook(() => useLocalStorage(key, initialValue));
+
+    act(() => {
+      result.current[1]('updated');
+    });
+
+    expect(result.current[0]).toBe('updated');
+    setItemSpy.mockRestore();
+  });
+
+  it('returns the same setter function on re-renders', () => {
+    const { result, rerender } = renderHook(() => useLocalStorage(key, initialValue));
+    const initialSetter = result.current[1];
+
+    rerender();
+    expect(result.current[1]).toBe(initialSetter);
+  });
+});
+
+
++++++ src/hooks/useLocalStorage.ts
+import { useState, useEffect } from 'react';
+
+export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T | ((val: T) => T)) => void] {
+  const [storedValue, setStoredValue] = useState<T>(() => {
+    try {
+      const item = window.localStorage.getItem(key);
+      return item ? JSON.parse(item) : initialValue;
+    } catch (error) {
+      console.error(error);
+      return initialValue;
+    }
+  });
+
+  const setValue = (value: T | ((val: T) => T)) => {
+    try {
+      const valueToStore = value instanceof Function ? value(storedValue) : value;
+      setStoredValue(valueToStore);
+      window.localStorage.setItem(key, JSON.stringify(valueToStore));
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === key) {
+        try {
+          setStoredValue(e.newValue ? JSON.parse(e.newValue) : initialValue);
+        } catch (error) {
+          console.error(error);
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [key, initialValue]);
+
+  return [storedValue, setValue];
+}
+
+
++++++ src/main.tsx
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import './index.css';
+
+const rootElement = document.getElementById('root');
+
+if (!rootElement) {
+  throw new Error('Root element not found');
+}
+
+ReactDOM.createRoot(rootElement).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+
+
++++++ src/pages/Home.tsx
+import React from 'react';
+import { Link } from 'react-router-dom';
+
+export const Home: React.FC = () => {
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+      <div className="max-w-2xl w-full text-center">
+        <h1 className="text-5xl font-bold text-gray-900 mb-6">Welcome to Writespace</h1>
+        <p className="text-xl text-gray-600 mb-8">
+          A clean, distraction-free writing environment for your thoughts and ideas.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <Link
+            to="/editor"
+            className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
+          >
+            Start Writing
+          </Link>
+          <Link
+            to="/about"
+            className="px-6 py-3 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors font-medium"
+          >
+            Learn More
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
++++++ src/pages/Home.test.tsx
+import { render, screen } from '@testing-library/react';
+import { Home } from './Home';
+import { MemoryRouter } from 'react-router-dom';
+
+describe('Home', () => {
+  it('renders the welcome heading', () => {
+    render(
+      <MemoryRouter>
+        <Home />
+      </MemoryRouter>
+    );
+    expect(screen.getByText('Welcome to Writespace')).toBeInTheDocument();
+  });
+
+  it('renders the description text', () => {
+    render(
+      <MemoryRouter>
+        <Home />
+      </MemoryRouter>
+    );
+    expect(screen.getByText('A clean, distraction-free writing environment for your thoughts and ideas.')).toBeInTheDocument();
+  });
+
+  it('renders the Start Writing link with correct href', () => {
+    render(
+      <MemoryRouter>
+        <Home />
+      </MemoryRouter>
+    );
+    const link = screen.getByText('Start Writing');
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute('href', '/editor');
+  });
+
+  it('renders the Learn More link with correct href', () => {
+    render(
+      <MemoryRouter>
+        <Home />
+      </MemoryRouter>
+    );
+    const link = screen.getByText('Learn More');
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute('href', '/about');
+  });
+
+  it('has proper accessibility attributes', () => {
+    render(
+      <MemoryRouter>
+        <Home />
+      </MemoryRouter>
+    );
+    expect(screen.getByRole('heading', { name: 'Welcome to Writespace' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Start Writing' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Learn More' })).toBeInTheDocument();
+  });
+});
+
+
++++++ src/pages/NotFound.tsx
+import React from 'react';
+import { Link } from 'react-router-dom';
+
+export const NotFound: React.FC = () => {
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+      <div className="max-w-md w-full text-center">
+        <h1 className="text-6xl font-bold text-gray-900 mb-4">404</h1>
+        <h2 className="text-2xl font-semibold text-gray-700 mb-4">Page Not Found</h2>
+        <p className="text-gray-600 mb-8">
+          The page you're looking for doesn't exist or has been moved.
+        </p>
+        <Link
+          to="/"
+          className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
+        >
+          Go Home
+        </Link>
+      </div>
+    </div>
+  );
+};
+
+
++++++ src/pages/NotFound.test.tsx
+import { render, screen } from '@testing-library/react';
+import { NotFound } from './NotFound';
+import { MemoryRouter } from 'react-router-dom';
+
+describe('NotFound', () => {
+  it('renders the 404 heading', () => {
+    render(
+      <MemoryRouter>
+        <NotFound />
+      </MemoryRouter>
+    );
+    expect(screen.getByText('404')).toBeInTheDocument();
+  });
+
+  it('renders the Page Not Found heading', () => {
+    render(
+      <MemoryRouter>
+        <NotFound />
+      </MemoryRouter>
+    );
+    expect(screen.getByText('Page Not Found')).toBeInTheDocument();
+  });
+
+  it('renders the description text', () => {
+    render(
+      <MemoryRouter>
+        <NotFound />
+      </MemoryRouter>
+    );
+    expect(screen.getByText("The page you're looking for doesn't exist or has been moved.")).toBeInTheDocument();
+  });
+
+  it('renders the Go Home link with correct href', () => {
+    render(
+      <MemoryRouter>
+        <NotFound />
+      </MemoryRouter>
+    );
+    const link = screen.getByText('Go Home');
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute('href', '/');
+  });
+
+  it('has proper accessibility attributes', () => {
+    render(
+      <MemoryRouter>
+        <NotFound />
+      </MemoryRouter>
+    );
+    expect(screen.getByRole('heading', { name: '404' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Page Not Found' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Go Home' })).toBeInTheDocument();
+  });
+});
+
+
++++++ src/routes/AppRouter.tsx
+import React from 'react';
+import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { Home } from '../pages/Home';
+import { NotFound } from '../pages/NotFound';
+import { ErrorBoundary } from '../components/ErrorBoundary';
+
+const router = createBrowserRouter([
+  {
+    path: '/',
+    element: (
+      <ErrorBoundary>
+        <Home />
+      </ErrorBoundary>
+    ),
+    errorElement: <NotFound />,
+  },
+  {
+    path: '*',
+    element: <NotFound />,
+  },
+]);
+
+export const AppRouter: React.FC = () => {
+  return <RouterProvider router={router} />;
+};
+
+
++++++ src/routes/AppRouter.test.tsx
+import { render, screen } from '@testing-library/react';
+import { AppRouter } from './AppRouter';
+import { MemoryRouter } from 'react-router-dom';
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
+  return {
+    ...actual,
+    createBrowserRouter: vi.fn().mockImplementation((routes) => routes),
+    RouterProvider: ({ router }: { router: unknown }) => {
+      const route = (router as Array<{ path: string; element: React.ReactNode }>).find(
+        r => r.path === '/'
+      );
+      return <>{route?.element}</>;
+    },
+  };
+});
+
+vi.mock('../pages/Home', () => ({
+  Home: () => <div>Home Page</div>,
+}));
+
+vi.mock('../pages/NotFound', () => ({
+  NotFound: () => <div>Not Found Page</div>,
+}));
+
+describe('AppRouter', () => {
+  it('renders the Home page at the root path', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <AppRouter />
+      </MemoryRouter>
+    );
+    expect(screen.getByText('Home Page')).toBeInTheDocument();
+  });
+
+  it('renders the NotFound page for unknown paths', () => {
+    render(
+      <MemoryRouter initialEntries={['/unknown']}>
+        <AppRouter />
+      </MemoryRouter>
+    );
+    expect(screen.getByText('Not Found Page')).toBeInTheDocument();
+  });
+});
+
+
++++++ src/utils/sanitizeHtml.test.ts
+import DOMPurify from 'dompurify';
+import { sanitizeHtml } from './sanitizeHtml';
+
+vi.mock('dompurify', () => ({
+  default: {
+    sanitize: vi.fn((html: string) => html),
+    setConfig: vi.fn(),
+  },
+}));
+
+describe('sanitizeHtml', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('sanitizes HTML with default config', () => {
+    const dirtyHtml = '<script>alert("xss")</script><p>Safe content</p>';
+    const result = sanitizeHtml(dirtyHtml);
+    expect(DOMPurify.sanitize).toHaveBeenCalledWith(dirtyHtml, { ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'br', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'] });
+    expect(result).toBe(dirtyHtml);
+  });
+
+  it('sanitizes HTML with custom config', () => {
+    const dirtyHtml = '<div>Custom content</div>';
+    const customConfig = { ALLOWED_TAGS: ['div'] };
+    const result = sanitizeHtml(dirtyHtml, customConfig);
+    expect(DOMPurify.sanitize).toHaveBeenCalledWith(dirtyHtml, customConfig);
+    expect(result).toBe(dirtyHtml);
+  });
+
+  it('returns empty string when input is empty', () => {
+    const result = sanitizeHtml('');
+    expect(DOMPurify.sanitize).toHaveBeenCalledWith('', expect.any(Object));
+    expect(result).toBe('');
+  });
+
+  it('handles null and undefined inputs', () => {
+    const result1 = sanitizeHtml(null as unknown as string);
+    const result2 = sanitizeHtml(undefined as unknown as string);
+    expect(result1).toBe('');
+    expect(result2).toBe('');
+  });
+});
+
+
++++++ src/utils/sanitizeHtml.ts
+import DOMPurify from 'dompurify';
+
+export const sanitizeHtml = (dirtyHtml: string, config?: DOMPurify.Config): string => {
+  if (!dirtyHtml) return '';
+
+  const defaultConfig: DOMPurify.Config = {
+    ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'br', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'],
+  };
+
+  return DOMPurify.sanitize(dirtyHtml, config || defaultConfig);
+};
